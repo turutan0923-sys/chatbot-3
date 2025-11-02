@@ -1,100 +1,52 @@
 import streamlit as st
-import requests
 
-# タイトルと説明の表示
-st.title("💬 Gemini チャットボット")
-st.write("このシンプルなチャットボットは、Google の Gemini API を利用して応答を生成します。 ")
+st.title("あなたに合ったがん検診案内")
 
-# Streamlit Community CloudのSecretsからAPIキーを取得
-# .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
-gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+st.markdown("### 元気でにこにこしている、さまざまな年代の男女")
+# イラスト画像のリスト（パスまたはURL）
+images = [
+    "images/kids.png",
+    "images/young_adult.png",
+    "images/middle_age.png",
+    "images/senior.png"
+]
+captions = [
+    "元気な子ども",
+    "若い男性と女性",
+    "中年の男女",
+    "高齢の男女"
+]
 
-if not gemini_api_key:
-    st.info("Streamlit Community CloudのSecretsに `GEMINI_API_KEY` を設定してください。", icon="🗝️")
-else:
-    # ユーザーがモデルを選択できるようにする（正しいモデル名表記を使用）
-    model_name = st.selectbox(
-        "使用する Gemini モデルを選択",
-        (
-            "gemini-2.5-flash", 
-            "gemini-2.5-pro"
-        )
-    )
-    st.write(f"現在のモデル: **{model_name}**") # 選択中のモデルを表示
+# 横並びで画像を表示
+cols = st.columns(len(images))
+for i, (img, cap) in enumerate(zip(images, captions)):
+    with cols[i]:
+        st.image(img, caption=cap, use_column_width=True)
 
-    if "messages" not in st.session_state:
-        # 初期のメッセージリストをセッションステートに作成
-        st.session_state.messages = []
+st.write("---")
+# ↓がん検診の案内・入力フォーム（前回例の流用）
+def recommend_cancer_screenings(age, gender):
+    recommendations = []
+    if age >= 50:
+        recommendations.append("胃がん検診（2年に1回）")
+    if age >= 40:
+        recommendations.append("肺がん検診（年1回）")
+        recommendations.append("大腸がん検診（年1回）")
+    if gender == "女性":
+        if age >= 40:
+            recommendations.append("乳がん検診（2年に1回）")
+        if age >= 20:
+            recommendations.append("子宮頸がん検診（2年に1回）")
+    return recommendations
 
-    # 既存のチャットメッセージを表示
-    for message in st.session_state.messages:
-        # roleに応じて日本語で表示
-        display_role = "ユーザー" if message["role"] == "user" else "アシスタント"
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+age = st.number_input("年齢を入力してください", min_value=0, max_value=120, value=40)
+gender = st.selectbox("性別を選択してください", ["男性", "女性"])
 
-    # ユーザーがメッセージを入力するためのチャット入力フィールド
-    if prompt := st.chat_input("ここにメッセージを入力"):
-
-        # ユーザーのプロンプトを保存・表示
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Gemini API用にメッセージ形式を準備（ロールを "user" または "model" に変換）
-        gemini_messages = []
-        for m in st.session_state.messages:
-            # StreamlitのロールをAPIのロールにマッピング
-            api_role = "user" if m["role"] == "user" else "model"
-            gemini_messages.append(
-                {
-                    "role": api_role,
-                    "parts": [{"text": m["content"]}]
-                }
-            )
-
-        # Gemini API endpoint
-        api_url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={gemini_api_key}"
-
-        headers = {"Content-Type": "application/json"}
-        data = {
-            "contents": gemini_messages,
-            "generationConfig": {
-                "temperature": 0.7,
-                "topP": 0.8
-            }
-        }
-
-        try:
-            # アシスタントの応答をチャットメッセージコンテナ内に表示
-            with st.chat_message("assistant"):
-                with st.spinner(f"{model_name} が応答を生成中..."):
-                    response = requests.post(api_url, headers=headers, json=data, timeout=30)
-                    response.raise_for_status() # HTTPエラーがあれば例外を発生
-                    
-                    result = response.json()
-                    
-                    # APIからのレスポンス構造のチェックと応答の取得
-                    if "candidates" in result and result["candidates"] and \
-                       "content" in result["candidates"][0] and \
-                       "parts" in result["candidates"][0]["content"] and \
-                       result["candidates"][0]["content"]["parts"]:
-                        
-                        gemini_reply = result["candidates"][0]["content"]["parts"][0]["text"]
-                    else:
-                        # 予期しないレスポンス形式の場合
-                        gemini_reply = f"エラー: 予期しないAPI応答形式です。{result}"
-
-                    st.markdown(gemini_reply)
-            
-            # アシスタントの応答をセッションステートに保存
-            st.session_state.messages.append({"role": "assistant", "content": gemini_reply})
-
-        except requests.exceptions.RequestException as e:
-            error_message = f"APIリクエストエラーが発生しました: {e}"
-            st.error(error_message)
-            st.session_state.messages.append({"role": "assistant", "content": error_message})
-        except Exception as e:
-            error_message = f"予期せぬエラーが発生しました: {e}"
-            st.error(error_message)
-            st.session_state.messages.append({"role": "assistant", "content": error_message})
+if st.button("おすすめのがん検診を表示"):
+    recs = recommend_cancer_screenings(age, gender)
+    if recs:
+        st.write(f"**{age}歳・{gender}に推奨されるがん検診**")
+        for r in recs:
+            st.write(f"- {r}")
+    else:
+        st.write("該当する推奨がん検診はありません。")
